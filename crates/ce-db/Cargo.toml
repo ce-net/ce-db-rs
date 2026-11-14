@@ -1,0 +1,16 @@
+[package]
+name = "ce-db"
+version = "0.1.0"
+edition = "2021"
+description = "ce-db for Rust: typed collections on state.store (insert, get, update, remove, queries by declared index, live watch)"
+
+[dependencies]
+ce-db-core = { path = "../ce-db-core" }
+state-store-api = { workspace = true }
+ce-wire = { workspace = true, features = ["client", "blocking"] }
+ce-gate = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["rt", "time"] }
+
+[dev-dependencies]
+ce-db-dev = { path = "../ce-db-dev" }

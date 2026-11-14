@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = ["crates/ce-db-core", "crates/ce-db-derive", "crates/ce-db", "crates/ce-db-dev"]
+
+[workspace.dependencies]
+# one ce-wire for the whole graph: the rev state-store-api pins, so Coll/Doc/StateStore unify
+ce-wire = { git = "https://github.com/Leif-Rydenfalk/rust-stack", rev = "bd353170d45dc2985ef42c525f616a333c1a3120", default-features = false }
+ce-gate = { git = "https://github.com/Leif-Rydenfalk/rust-stack", rev = "bd353170d45dc2985ef42c525f616a333c1a3120" }
+state-store-api = { git = "https://github.com/Leif-Rydenfalk/state-store-cell", rev = "7ae4f4914f0c85b2a8098e67f694b2e6de104459" }
+serde_json = "1"

@@ -1,0 +1,14 @@
+[package]
+name = "ce-db-dev"
+version = "0.1.0"
+edition = "2021"
+description = "A dev state.store: the typed state.store v2 API (all ops and Watch) in memory on loopback, with dev grants. For tests, the conformance kit and local demos; never production data"
+
+[[bin]]
+name = "ce-db-dev-store"
+path = "src/main.rs"
+
+[dependencies]
+state-store-api = { workspace = true }
+ce-wire = { workspace = true, features = ["blocking"] }
+serde_json = { workspace = true }
