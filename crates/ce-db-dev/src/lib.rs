@@ -30,6 +30,29 @@ struct Shared {
     st: Mutex<State>,
     changed: Condvar,
     grants: HashMap<String, Vec<String>>,
+    /// `--data FILE`: the whole state, rewritten after each change, so a killed dev store restarts with its rows and
+    /// seqs (as a replica does). None: memory only.
+    data: Option<std::path::PathBuf>,
+}
+
+impl State {
+    fn to_json(&self) -> Value {
+        let rows: Vec<Value> = self.rows.iter().map(|((a, c, k), d)| json!([a, c, k, d.value, d.seq, d.version, d.deleted])).collect();
+        json!({"seq": self.seq, "schemas": self.schemas, "rows": rows})
+    }
+    fn from_json(v: &Value) -> Result<State, String> {
+        let mut st = State { seq: v.get("seq").and_then(Value::as_u64).ok_or("no seq")?, ..State::default() };
+        for (app, sc) in v.get("schemas").and_then(Value::as_object).into_iter().flatten() {
+            st.schemas.insert(app.clone(), sc.clone());
+        }
+        for r in v.get("rows").and_then(Value::as_array).into_iter().flatten() {
+            let s = |i: usize| r.get(i).and_then(Value::as_str).map(str::to_string).ok_or_else(|| format!("bad row {r}"));
+            let n = |i: usize| r.get(i).and_then(Value::as_u64).ok_or_else(|| format!("bad row {r}"));
+            let d = Doc { key: s(2)?, value: s(3)?, seq: n(4)?, version: n(5)?, deleted: r.get(6).and_then(Value::as_bool).unwrap_or(false) };
+            st.rows.insert((s(0)?, s(1)?, s(2)?), d);
+        }
+        Ok(st)
+    }
 }
 
 /// A running dev store. It serves until the process ends.
@@ -166,6 +189,12 @@ impl Shared {
     fn bump(&self) {
         self.changed.notify_all();
     }
+    /// Write the state to `--data` (temp file, then rename, so a kill mid-write leaves the previous state).
+    fn save(&self, st: &State) -> Result<(), String> {
+        let Some(p) = &self.data else { return Ok(()) };
+        let tmp = p.with_extension("tmp");
+        std::fs::write(&tmp, st.to_json().to_string()).and_then(|_| std::fs::rename(&tmp, p)).map_err(|e| format!("dev store: saving {}: {e}", p.display()))
+    }
 
     fn get(&self, r: GetReq) -> Result<Option<Doc>, String> {
         check_key(&r.key)?;
@@ -227,6 +256,7 @@ impl Shared {
         st.seq += 1;
         let d = Doc { key: key.into(), value: text.clone().unwrap_or_default(), seq: st.seq, version: version + 1, deleted: text.is_none() };
         st.rows.insert(k, d.clone());
+        self.save(&st)?;
         drop(st);
         self.bump();
         Ok(Some(d))
@@ -273,17 +303,29 @@ impl Shared {
         let mut st = self.st.lock().map_err(|_| "poisoned")?;
         st.schemas.insert(r.app, doc);
         st.seq += 1;
-        Ok(())
+        self.save(&st)
     }
 }
 
 /// Start a dev store on `listen` (`127.0.0.1:0` for a free port). Loopback only.
 pub fn serve(listen: &str, grants: Grants) -> std::io::Result<DevStore> {
+    serve_with(listen, grants, None)
+}
+
+/// [`serve`], keeping the state in `data` (read at start when it exists, rewritten after each change).
+pub fn serve_with(listen: &str, grants: Grants, data: Option<std::path::PathBuf>) -> std::io::Result<DevStore> {
+    let st = match data.as_ref().filter(|p| p.exists()) {
+        Some(p) => {
+            let v: Value = serde_json::from_str(&std::fs::read_to_string(p)?).map_err(|e| std::io::Error::other(format!("{}: {e}", p.display())))?;
+            State::from_json(&v).map_err(|e| std::io::Error::other(format!("{}: {e}", p.display())))?
+        }
+        None => State::default(),
+    };
     let ip: std::net::SocketAddr = listen.parse().map_err(|e| std::io::Error::other(format!("{listen}: {e}")))?;
     if !ip.ip().is_loopback() {
         return Err(std::io::Error::other("the dev store binds loopback only"));
     }
-    let shared = Arc::new(Shared { st: Mutex::new(State::default()), changed: Condvar::new(), grants: grants.0.into_iter().collect() });
+    let shared = Arc::new(Shared { st: Mutex::new(st), changed: Condvar::new(), grants: grants.0.into_iter().collect(), data });
     let gate = |_: &ce_wire::Hello| Ok(ce_wire::Caller { name: "dev".into(), rights: vec!["state.store:read".into(), "state.store:write".into()] });
     let s = shared.clone();
     let (s1, s2, s3, s4, s5, s6, s7, s8, s9) = (s.clone(), s.clone(), s.clone(), s.clone(), s.clone(), s.clone(), s.clone(), s.clone(), s.clone());
@@ -342,6 +384,7 @@ impl DevStore {
     pub fn put_schema(&self, app: &str, schema: Value) {
         if let Ok(mut st) = self.shared.st.lock() {
             st.schemas.insert(app.into(), schema);
+            let _ = self.shared.save(&st);
         }
     }
     /// Rows of `app/coll` as stored (live only), for tests that check what really landed.
@@ -385,5 +428,24 @@ mod tests {
         let p = c.call::<List>(&ListReq { at: at.clone(), prefix: "".into(), since: 0, limit: 10, include_deleted: true, cap: "ro".into() }).unwrap();
         assert_eq!(p.docs.len(), 1);
         assert!(p.docs[0].deleted);
+    }
+
+    #[test]
+    fn data_file_survives_a_restart() {
+        let dir = std::env::temp_dir().join(format!("ce-db-dev-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("store.json");
+        let _ = std::fs::remove_file(&f);
+        let at = Coll { app: "t-app".into(), coll: "c".into() };
+        let schema = json!({"app":"t-app","collections":{"c":{"value":{"type":"object"}}}});
+        {
+            let s = serve_with("127.0.0.1:0", Grants::all_of("rw", "t-app"), Some(f.clone())).unwrap();
+            s.put_schema("t-app", schema);
+            client(&s).call::<Put>(&PutReq { at: at.clone(), key: "k".into(), value: "{\"n\":1}".into(), if_version: None, insert_only: false, cap: "rw".into() }).unwrap();
+        }
+        let s = serve_with("127.0.0.1:0", Grants::all_of("rw", "t-app"), Some(f.clone())).unwrap();
+        let d = client(&s).call::<Get>(&GetReq { at: at.clone(), key: "k".into(), cap: "rw".into() }).unwrap().unwrap();
+        assert_eq!((d.value.as_str(), d.seq, d.version), ("{\"n\":1}", 1, 1));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

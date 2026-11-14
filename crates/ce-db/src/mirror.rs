@@ -36,6 +36,7 @@ pub(crate) struct St<T> {
     pub link: Link,
     pub error: Option<DbError>,
     subs: Vec<Sub<T>>,
+    link_subs: Vec<Sender<Link>>,
     next_id: u64,
     ep: usize,
 }
@@ -58,6 +59,14 @@ fn decode_doc<T: Record>(d: &Doc) -> Result<(T, Obj), String> {
 }
 
 impl<T: Record> St<T> {
+    /// Set the link and tell every link watcher, once per transition.
+    pub fn set_link(&mut self, l: Link) {
+        if self.link == l {
+            return;
+        }
+        self.link = l.clone();
+        self.link_subs.retain(|tx| tx.send(l.clone()).is_ok());
+    }
     fn index_add(&mut self, key: &str, t: &T) {
         for (f, _) in T::meta().indexes() {
             self.idx.entry(f).or_default().insert((t.index_val(f), key.to_string()));
@@ -133,7 +142,7 @@ impl<T: Record> St<T> {
 impl<T: Record> Mirror<T> {
     pub fn start(store: Arc<Store>) -> Arc<Mirror<T>> {
         let m = Arc::new(Mirror {
-            st: Mutex::new(St { rows: BTreeMap::new(), idx: HashMap::new(), rejects: BTreeMap::new(), head: 0, synced: false, link: Link::Connecting, error: None, subs: Vec::new(), next_id: 1, ep: 0 }),
+            st: Mutex::new(St { rows: BTreeMap::new(), idx: HashMap::new(), rejects: BTreeMap::new(), head: 0, synced: false, link: Link::Connecting, error: None, subs: Vec::new(), link_subs: Vec::new(), next_id: 1, ep: 0 }),
             cv: Condvar::new(),
             store,
         });
@@ -183,6 +192,16 @@ impl<T: Record> Mirror<T> {
         if let Ok(mut g) = self.st.lock() {
             g.subs.retain(|s| s.id != id);
         }
+    }
+
+    /// Every later link transition (Connecting, Live, Offline, Resyncing), starting with the current one.
+    pub fn link_changes(&self) -> Receiver<Link> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        if let Ok(mut g) = self.st.lock() {
+            let _ = tx.send(g.link.clone());
+            g.link_subs.push(tx);
+        }
+        rx
     }
 
     pub fn watchers(&self) -> usize {
@@ -250,7 +269,7 @@ impl<T: Record> Mirror<T> {
 
     fn set_link(&self, l: Link) {
         if let Ok(mut g) = self.st.lock() {
-            g.link = l;
+            g.set_link(l);
         }
     }
 }
@@ -305,7 +324,7 @@ async fn stream<T: Record>(w: &Weak<Mirror<T>>) -> End {
                     g.apply(&d);
                     if !live {
                         live = true;
-                        g.link = Link::Live;
+                        g.set_link(Link::Live);
                     }
                 }
             }
@@ -335,7 +354,7 @@ fn run<T: Record>(w: Weak<Mirror<T>>) {
                     if let Ok(mut g) = m.lock() {
                         g.error = Some(e.clone());
                         g.synced = true;
-                        g.link = Link::Offline(e.to_string());
+                        g.set_link(Link::Offline(e.to_string()));
                     }
                     m.cv.notify_all();
                     return;
@@ -345,6 +364,11 @@ fn run<T: Record>(w: Weak<Mirror<T>>) {
                     drop(m);
                     std::thread::sleep(backoff);
                     backoff = (backoff * 2).min(BACKOFF_MAX);
+                    if let Some(m) = w.upgrade() {
+                        if m.lock().is_ok_and(|g| g.synced) {
+                            m.set_link(Link::Resyncing);
+                        }
+                    }
                     continue;
                 }
             }
@@ -356,6 +380,9 @@ fn run<T: Record>(w: Weak<Mirror<T>>) {
             End::Broke(why) => {
                 let Some(m) = w.upgrade() else { return };
                 m.set_link(Link::Offline(why));
+                // List again before following the stream: the store may have restarted, lost or renumbered rows,
+                // or be another replica. The walk emits only the difference from the mirror (no duplicate, no gap).
+                need_list = true;
                 if t0.elapsed() > Duration::from_secs(10) {
                     backoff = BACKOFF_MIN;
                 }

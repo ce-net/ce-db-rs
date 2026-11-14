@@ -424,6 +424,11 @@ impl<T: Record> Watch<T> {
     pub fn link(&self) -> Link {
         self.m.lock().map(|g| g.link.clone()).unwrap_or(Link::Offline("poisoned".into()))
     }
+    /// The link's transitions from now on (the current state first): `Live`, then `Offline(why)` when the store goes
+    /// away, `Resyncing` while it lists again after reconnecting, `Live` once the stream follows again. For a UI badge.
+    pub fn link_changes(&self) -> std::sync::mpsc::Receiver<Link> {
+        self.m.link_changes()
+    }
 }
 
 impl<T: Record> Iterator for Watch<T> {

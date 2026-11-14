@@ -1,0 +1,48 @@
+error[E0308]: mismatched types
+  --> tests/schema-change/type_changed.rs:20:98
+   |
+20 |     let id = parts.insert(&Part { id: Id::new(), name: "M3 screw".into(), bin: "A4".into(), qty: 500 })?;
+   |                                                                                                  ^^^ expected `String`, found integer
+   |
+help: try using a conversion method
+   |
+20 |     let id = parts.insert(&Part { id: Id::new(), name: "M3 screw".into(), bin: "A4".into(), qty: 500.to_string() })?;
+   |                                                                                                     ++++++++++++
+
+error[E0368]: binary assignment operation `-=` cannot be applied to type `std::string::String`
+  --> tests/schema-change/type_changed.rs:21:27
+   |
+21 |     parts.update(&id, |p| p.qty -= 1)?;
+   |                           -----^^^^^
+   |                           |
+   |                           cannot use `-=` on type `std::string::String`
+   |
+note: `std::string::String` does not implement `SubAssign<{integer}>`
+  --> $RUST/alloc/src/string.rs
+   |
+   = note: `std::string::String` is defined in another crate
+
+error[E0277]: the trait bound `RangeTo<{integer}>: RangeBounds<std::string::String>` is not satisfied
+  --> tests/schema-change/type_changed.rs:22:40
+   |
+22 |     let _low: Vec<Part> = parts.by_qty(..20).fetch()?;
+   |                                 ------ ^^^^ the trait `RangeBounds<std::string::String>` is not implemented for `RangeTo<{integer}>`
+   |                                 |
+   |                                 required by a bound introduced by this call
+   |
+help: the following other types implement trait `RangeBounds<T>`
+  --> $RUST/core/src/ops/range.rs
+   |
+   = note: `RangeTo<T>`
+  ::: $RUST/core/src/ops/range.rs
+   |
+   = note: `RangeTo<&T>`
+note: required by a bound in `PartIndexes::by_qty`
+  --> tests/schema-change/type_changed.rs:5:10
+   |
+ 5 | #[derive(Record, Clone, Debug)]
+   |          ^^^^^^ required by this bound in `PartIndexes::by_qty`
+...
+14 |     pub qty: String,
+   |         --- required by a bound in this associated function
+   = note: this error originates in the derive macro `Record` (in Nightly builds, run with -Z macro-backtrace for more info)

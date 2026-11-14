@@ -14,3 +14,4 @@ tokio = { version = "1", features = ["rt", "time"] }
 
 [dev-dependencies]
 ce-db-dev = { path = "../ce-db-dev" }
+trybuild = "1"

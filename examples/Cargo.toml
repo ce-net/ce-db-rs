@@ -1,0 +1,17 @@
+[package]
+name = "ce-db-examples"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Runnable ce-db examples: define a schema, insert, query and watch"
+
+[[bin]]
+name = "quickstart"
+path = "quickstart.rs"
+
+[dependencies]
+ce-db = { path = "../crates/ce-db" }
+ce-db-core = { path = "../crates/ce-db-core" }
+
+[dev-dependencies]
+ce-db-dev = { path = "../crates/ce-db-dev" }

@@ -1,0 +1,13 @@
+error[E0560]: struct `Part` has no field named `bin`
+  --> tests/schema-change/field_removed.rs:18:75
+   |
+18 |     let id = parts.insert(&Part { id: Id::new(), name: "M3 screw".into(), bin: "A4".into(), qty: 500 })?;
+   |                                                                           ^^^ `Part` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0599]: no method named `by_bin` found for struct `Collection<T>` in the current scope
+  --> tests/schema-change/field_removed.rs:20:35
+   |
+20 |     let _in_a4: Vec<Part> = parts.by_bin("A4").fetch()?;
+   |                                   ^^^^^^ method not found in `Collection<Part>`

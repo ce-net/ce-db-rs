@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ce-db-core", "crates/ce-db-derive", "crates/ce-db", "crates/ce-db-dev"]
+members = ["crates/ce-db-core", "crates/ce-db-derive", "crates/ce-db", "crates/ce-db-dev", "examples"]
 
 [workspace.dependencies]
 # one ce-wire for the whole graph: the rev state-store-api pins, so Coll/Doc/StateStore unify

@@ -1,0 +1,26 @@
+# Manual only (Leif 2026-10-14 00:12 CEST: "We have used 90% of our actions on GitHub"): run it with
+# `gh workflow run test -R Leif-Rydenfalk/ce-db-rs`. Private git deps (rust-stack, state-store-cell) are read with
+# per-repo read-only deploy keys: secret CE_DEPLOY_KEYS holds one key per private dep repo.
+name: test
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      # pinned: the compile-fail snapshots (tests/schema-change/*.stderr) are rustc's exact text
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: Swatinem/rust-cache@v2
+      - name: private git deps (read-only deploy keys)
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.CE_DEPLOY_KEYS }}
+      - run: git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
+      - name: cargo test (unit, dev store rules, the ce-db surface over ce-wire, schema-change compile-fail, quickstart)
+        run: cargo test --workspace
+      - name: the examples build
+        run: cargo build -p ce-db-examples
