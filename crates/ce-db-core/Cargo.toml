@@ -8,4 +8,6 @@ description = "ce-db schema half: the Record trait, field codecs, canonical JSON
 [dependencies]
 ce-db-derive = { path = "../ce-db-derive" }
 serde_json = { workspace = true }
+# types only (no tokio): `#[record(cell = Contract)]` reads the owning cell's name from `<Contract as Api>::NAME`
+ce-wire = { workspace = true }
 getrandom = "0.2"

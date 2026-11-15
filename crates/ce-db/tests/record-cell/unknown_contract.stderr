@@ -1,0 +1,5 @@
+error[E0425]: cannot find type `LiveDta` in this scope
+ --> tests/record-cell/unknown_contract.rs:5:17
+  |
+5 | #[record(cell = LiveDta, collection = "stations", version = 1)]
+  |                 ^^^^^^^ not found in this scope

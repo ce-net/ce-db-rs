@@ -5,8 +5,8 @@
 use ce_db::prelude::*;
 
 #[derive(Record, Clone, Debug)]
-#[db(app = "quickstart", collection = "tasks", version = 1)]
-pub struct Task { #[db(key)] pub id: Id, pub title: String, #[db(index)] pub done: bool }
+#[record(cell = "quickstart", collection = "tasks", version = 1)]
+pub struct Task { #[record(key)] pub id: Id, pub title: String, #[record(index)] pub done: bool }
 
 fn main() -> Result<(), DbError> {
     let tasks = ce_db::open("quickstart")?.collection::<Task>()?;   // registers the schema when it is missing

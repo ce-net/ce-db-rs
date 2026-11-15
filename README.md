@@ -17,8 +17,8 @@ CE_DB_STORE=127.0.0.1:7811 CE_DB_CAP=dev cargo run -p ce-db-examples --bin quick
 use ce_db::prelude::*;
 
 #[derive(Record, Clone, Debug)]
-#[db(app = "quickstart", collection = "tasks", version = 1)]
-pub struct Task { #[db(key)] pub id: Id, pub title: String, #[db(index)] pub done: bool }
+#[record(cell = "quickstart", collection = "tasks", version = 1)]
+pub struct Task { #[record(key)] pub id: Id, pub title: String, #[record(index)] pub done: bool }
 
 fn main() -> Result<(), DbError> {
     let tasks = ce_db::open("quickstart")?.collection::<Task>()?;   // registers the schema when it is missing
@@ -53,13 +53,13 @@ use ce_db::prelude::*;                       // a schema crate depends on ce-db-
 
 /// A part in a bin.
 #[derive(Record, Clone, Debug)]
-#[db(app = "parts-demo", collection = "parts", version = 2)]
+#[record(cell = "parts-demo", collection = "parts", version = 2)]
 pub struct Part {
-    #[db(key)]            pub id: Id,                 // ULID made by the client
-    #[db(max = 120)]      pub name: String,
-    #[db(index)]          pub bin: String,            // equality index
-    #[db(index, ordered)] pub qty: u32,               // range index
-    #[db(since = 2)]      pub supplier: Option<String>,
+    #[record(key)]            pub id: Id,                 // ULID made by the client
+    #[record(max = 120)]      pub name: String,
+    #[record(index)]          pub bin: String,            // equality index
+    #[record(index, ordered)] pub qty: u32,               // range index
+    #[record(since = 2)]      pub supplier: Option<String>,
 }
 
 let db = ce_db::open("parts-demo")?;                  // or open_at(app, "127.0.0.1:7811", cap) for a dev store

@@ -6,7 +6,7 @@ use proc_macro2::{Span, TokenStream as TS2};
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, Data, DeriveInput, Error, Expr, Fields, Lit, Type};
 
-#[proc_macro_derive(Record, attributes(db))]
+#[proc_macro_derive(Record, attributes(record, db))]
 pub fn derive_record(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match expand(&input) {
@@ -15,9 +15,18 @@ pub fn derive_record(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Who owns the collection: `cell = Contract` (a type implementing `ce_wire::Api`, so a typo does not compile),
+/// `cell = "name"`, or the deprecated `app = "name"`.
+enum Owner {
+    Name(String),
+    Contract(syn::Path),
+}
+
 #[derive(Default)]
 struct Coll {
-    app: Option<String>,
+    owner: Option<Owner>,
+    /// span of the `app` key, when the old word was used: the derive emits a deprecated item there
+    app_alias: Option<Span>,
     collection: Option<String>,
     version: u32,
     consistency: String,
@@ -70,6 +79,15 @@ where
     }
 }
 
+/// `#[record(..)]`, or its old spelling `#[db(..)]`.
+fn is_ours(a: &syn::Attribute) -> bool {
+    a.path().is_ident("record") || a.path().is_ident("db")
+}
+
+fn attr_name(a: &syn::Attribute) -> &'static str {
+    if a.path().is_ident("db") { "db" } else { "record" }
+}
+
 fn lit_str(e: &Expr) -> syn::Result<String> {
     match e {
         Expr::Lit(l) => match &l.lit {
@@ -109,11 +127,24 @@ fn name_ok(s: &str) -> bool {
 fn expand(input: &DeriveInput) -> syn::Result<TS2> {
     let name = &input.ident;
     let mut c = Coll { version: 1, consistency: "lww".into(), ..Default::default() };
-    for a in input.attrs.iter().filter(|a| a.path().is_ident("db")) {
+    for a in input.attrs.iter().filter(|a| is_ours(a)) {
+        let attr = attr_name(a);
         a.parse_nested_meta(|m| {
             let key = m.path.get_ident().map(|i| i.to_string()).unwrap_or_default();
             match key.as_str() {
-                "app" => c.app = Some(lit_str(&m.value()?.parse()?)?),
+                "cell" | "app" => {
+                    if c.owner.is_some() {
+                        return Err(m.error("the owning cell is given once: #[record(cell = ...)]"));
+                    }
+                    let e: Expr = m.value()?.parse()?;
+                    c.owner = Some(match (&e, key.as_str()) {
+                        (Expr::Path(p), "cell") if p.qself.is_none() => Owner::Contract(p.path.clone()),
+                        _ => Owner::Name(lit_str(&e)?),
+                    });
+                    if key == "app" {
+                        c.app_alias = Some(m.path.get_ident().map(|i| i.span()).unwrap_or_else(Span::call_site));
+                    }
+                }
                 "collection" => c.collection = Some(lit_str(&m.value()?.parse()?)?),
                 "version" => c.version = lit_int(&m.value()?.parse()?)?,
                 "consistency" => c.consistency = lit_str(&m.value()?.parse()?)?,
@@ -127,19 +158,38 @@ fn expand(input: &DeriveInput) -> syn::Result<TS2> {
                         c.replicas.push(lit_str(x)?);
                     }
                 }
-                other => return Err(m.error(format!("unknown #[db] key `{other}` (app, collection, version, consistency, hash_keys, per_person, replicas, mirror_limit)"))),
+                other => return Err(m.error(format!("unknown #[{attr}] key `{other}` (cell, collection, version, consistency, hash_keys, per_person, replicas, mirror_limit)"))),
             }
             Ok(())
         })?;
     }
     let span = Span::call_site();
-    let app = c.app.clone().ok_or_else(|| Error::new(span, "#[db(app = \"...\")] is required"))?;
-    let collection = c.collection.clone().ok_or_else(|| Error::new(span, "#[db(collection = \"...\")] is required"))?;
-    for (what, v) in [("app", &app), ("collection", &collection)] {
+    let owner = c.owner.take().ok_or_else(|| Error::new(span, "#[record(cell = Contract)] is required: the cell that owns this collection (cell = \"name\" also works)"))?;
+    let collection = c.collection.clone().ok_or_else(|| Error::new(span, "#[record(collection = \"...\")] is required"))?;
+    if let Owner::Name(v) = &owner {
         if !name_ok(v) {
-            return Err(Error::new(span, format!("{what} {v:?}: 1..=64 of [A-Za-z0-9._-]")));
+            return Err(Error::new(span, format!("cell {v:?}: 1..=64 of [A-Za-z0-9._-]")));
         }
     }
+    if !name_ok(&collection) {
+        return Err(Error::new(span, format!("collection {collection:?}: 1..=64 of [A-Za-z0-9._-]")));
+    }
+    let (app, app_label) = match &owner {
+        Owner::Name(v) => (quote!(#v), v.clone()),
+        Owner::Contract(p) => (quote!(<#p as ::ce_db_core::CellApi>::NAME), quote!(#p).to_string().replace(' ', "")),
+    };
+    // A proc macro cannot warn on stable Rust; using a #[deprecated] item it emits at the `app` key makes rustc do it.
+    let alias_warning = c.app_alias.map(|sp| {
+        let item = format_ident!("app_is_the_old_word_write_record_cell", span = sp);
+        quote::quote_spanned! {sp=>
+            const _: () = {
+                #[deprecated(note = "write #[record(cell = Contract)]; `app` is the old word for the owning cell")]
+                #[allow(non_upper_case_globals)]
+                const #item: () = ();
+                #item
+            };
+        }
+    });
     match c.consistency.as_str() {
         "lww" => {}
         "crdt" => return Err(Error::new(span, "consistency = crdt is slice 4 of DB-SDK-DESIGN.md (Counter, Set, Text as per-writer rows); not built yet")),
@@ -164,7 +214,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TS2> {
         let mut unique = false;
         let mut ordered = false;
         let mut blob = false;
-        for a in f.attrs.iter().filter(|a| a.path().is_ident("db")) {
+        for a in f.attrs.iter().filter(|a| is_ours(a)) {
             a.parse_nested_meta(|m| {
                 let key = m.path.get_ident().map(|i| i.to_string()).unwrap_or_default();
                 match key.as_str() {
@@ -184,7 +234,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TS2> {
         }
         if ordered {
             if s.index.is_none() {
-                return Err(Error::new_spanned(&ident, "`ordered` goes with `index`: #[db(index, ordered)]"));
+                return Err(Error::new_spanned(&ident, "`ordered` goes with `index`: #[record(index, ordered)]"));
             }
             s.index = Some(true);
         }
@@ -213,7 +263,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TS2> {
     }
     let keys: Vec<&FieldSpec> = specs.iter().filter(|s| s.key).collect();
     if keys.len() != 1 {
-        return Err(Error::new(span, "exactly one field carries #[db(key)]"));
+        return Err(Error::new(span, "exactly one field carries #[record(key)]"));
     }
     if specs.iter().any(|s| s.ident == "_v") {
         return Err(Error::new(span, "`_v` is the writer's schema version, kept by ce-db"));
@@ -301,9 +351,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TS2> {
             });
         }
     }
-    let trait_doc = format!("The declared indexes of `{type_name}` ({app}/{collection}): `use` this to call `by_<field>` on a collection.");
+    let trait_doc = format!("The declared indexes of `{type_name}` ({app_label}/{collection}): `use` this to call `by_<field>` on a collection.");
 
     Ok(quote! {
+        #alias_warning
+
         impl ::ce_db_core::Record for #name {
             fn meta() -> &'static ::ce_db_core::Meta {
                 static META: ::std::sync::OnceLock<::ce_db_core::Meta> = ::std::sync::OnceLock::new();

@@ -2,14 +2,14 @@
 use ce_db::prelude::*;
 
 #[derive(Record, Clone, Debug)]
-#[db(app = "shop", collection = "parts", version = 2)]
+#[record(cell = "shop", collection = "parts", version = 2)]
 pub struct Part {
-    #[db(key)]
+    #[record(key)]
     pub id: Id,
     pub name: String,
-    #[db(index)]
+    #[record(index)]
     pub bin: String,
-    #[db(index, ordered)]
+    #[record(index, ordered)]
     pub qty: u32,
 }
 

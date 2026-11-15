@@ -7,6 +7,8 @@
 //! are decimal strings; `u32` and smaller are numbers; bytes are lowercase hex; times are integer unix ms; `Id` is a
 //! 26-character ULID; every row carries `_v`, its writer's schema version. Fields a reader does not know are kept.
 pub use ce_db_derive::Record;
+/// A cell contract (`ce_wire::api!`): `#[record(cell = Contract)]` takes the owning cell's name from it.
+pub use ce_wire::Api as CellApi;
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
 use std::fmt;

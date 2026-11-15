@@ -5,17 +5,17 @@ use std::time::Duration;
 
 /// A part in a bin.
 #[derive(Record, Clone, Debug, PartialEq)]
-#[db(app = "t-parts", collection = "parts", version = 2)]
+#[record(cell = "t-parts", collection = "parts", version = 2)]
 pub struct Part {
-    #[db(key)]
+    #[record(key)]
     pub id: Id,
-    #[db(max = 120)]
+    #[record(max = 120)]
     pub name: String,
-    #[db(index)]
+    #[record(index)]
     pub bin: String,
-    #[db(index, ordered)]
+    #[record(index, ordered)]
     pub qty: u32,
-    #[db(since = 2)]
+    #[record(since = 2)]
     pub supplier: Option<String>,
     pub serial: u64,
 }

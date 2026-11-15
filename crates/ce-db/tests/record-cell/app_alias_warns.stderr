@@ -1,0 +1,11 @@
+error: use of deprecated constant `_::app_is_the_old_word_write_record_cell`: write #[record(cell = Contract)]; `app` is the old word for the owning cell
+ --> tests/record-cell/app_alias_warns.rs:6:6
+  |
+6 | #[db(app = "shop", collection = "parts", version = 1)]
+  |      ^^^
+  |
+note: the lint level is defined here
+ --> tests/record-cell/app_alias_warns.rs:2:9
+  |
+2 | #![deny(deprecated)]
+  |         ^^^^^^^^^^

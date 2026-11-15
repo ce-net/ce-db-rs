@@ -77,6 +77,12 @@ pub fn open(app: &str) -> Result<Db, DbError> {
     Ok(open_with(app, eps))
 }
 
+/// Open the collections of cell `C` (its contract type): `ce_db::open_cell::<LiveData>()` is `open(LiveData::NAME)`,
+/// so the owning cell's name is never retyped.
+pub fn open_cell<C: ce_wire::Api>() -> Result<Db, DbError> {
+    open(C::NAME)
+}
+
 /// Open `app` on the store at `addr` with `cap`, Hello empty: a dev store, or a test.
 pub fn open_at(app: &str, addr: &str, cap: &str) -> Result<Db, DbError> {
     check_name("app", app).map_err(|why| DbError::Invalid { field: "app".into(), why })?;
