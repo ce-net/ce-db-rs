@@ -9,5 +9,12 @@ description = "ce-db schema half: the Record trait, field codecs, canonical JSON
 ce-db-derive = { path = "../ce-db-derive" }
 serde_json = { workspace = true }
 # types only (no tokio): `#[record(cell = Contract)]` reads the owning cell's name from `<Contract as Api>::NAME`
-ce-wire = { workspace = true }
+ce-wire = { workspace = true, optional = true }
 getrandom = "0.2"
+
+[features]
+# `contract`: `CellApi` is `ce_wire::Api`, so `#[record(cell = Contract)]` takes any `ce_wire::api!` contract.
+# Without it (`default-features = false`) the crate has no git dependency at all and `CellApi` is a one-constant
+# trait of its own; `#[record(cell = "name")]` works either way.
+default = ["contract"]
+contract = ["dep:ce-wire"]

@@ -8,7 +8,14 @@
 //! 26-character ULID; every row carries `_v`, its writer's schema version. Fields a reader does not know are kept.
 pub use ce_db_derive::Record;
 /// A cell contract (`ce_wire::api!`): `#[record(cell = Contract)]` takes the owning cell's name from it.
+#[cfg(feature = "contract")]
 pub use ce_wire::Api as CellApi;
+/// A cell contract without ce-wire (feature `contract` off): `#[record(cell = Contract)]` takes the owning cell's
+/// name from `NAME`.
+#[cfg(not(feature = "contract"))]
+pub trait CellApi {
+    const NAME: &'static str;
+}
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
 use std::fmt;
