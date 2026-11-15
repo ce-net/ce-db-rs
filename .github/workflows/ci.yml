@@ -1,9 +1,11 @@
-# Manual only (Leif 2026-10-14 00:12 CEST: "We have used 90% of our actions on GitHub"): run it with
-# `gh workflow run test -R Leif-Rydenfalk/ce-db-rs`. Private git deps (rust-stack, state-store-cell) are read with
-# per-repo read-only deploy keys: secret CE_DEPLOY_KEYS holds one key per private dep repo.
-name: test
+name: ci
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -19,7 +21,6 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.CE_DEPLOY_KEYS }}
-      - run: git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
       - name: cargo test (unit, dev store rules, the ce-db surface over ce-wire, schema-change compile-fail, quickstart)
         run: cargo test --workspace
       - name: the examples build

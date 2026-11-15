@@ -2,6 +2,7 @@
 name = "ce-db-core"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 description = "ce-db schema half: the Record trait, field codecs, canonical JSON encoding, typed errors. No network; a schema crate depends on this alone"
 
 [dependencies]

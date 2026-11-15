@@ -2,6 +2,7 @@
 name = "ce-db-dev"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 description = "A dev state.store: the typed state.store v2 API (all ops and Watch) in memory on loopback, with dev grants. For tests, the conformance kit and local demos; never production data"
 
 [[bin]]

@@ -2,6 +2,7 @@
 name = "ce-db"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 description = "ce-db for Rust: typed collections on state.store (insert, get, update, remove, queries by declared index, live watch)"
 
 [dependencies]

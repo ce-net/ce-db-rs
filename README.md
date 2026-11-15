@@ -38,7 +38,7 @@ Synced
 Added(Task { id: Id("01K..."), title: "buy milk", done: false })
 ```
 
-In your own crate: `ce-db = { git = "https://github.com/Leif-Rydenfalk/ce-db-rs" }` (and `ce-db-core` for a schema
+In your own crate: `ce-db = { git = "https://github.com/ce-net/ce-db-rs" }` (and `ce-db-core` for a schema
 crate of its own). On a node with a state.store, drop `CE_DB_STORE`: `open(app)` finds this machine's replica and the
 wallet grant for the app (`state.<app>.*`; registering a schema needs `state.<app>.admin`).
 
@@ -114,8 +114,19 @@ written differently by ryu and by JavaScript; pinned values in db-conformance av
 cargo test            # core, derive, the dev store rules, the ce-db surface over ce-wire, schema-change compile-fail, quickstart
 ```
 
-CI: `.github/workflows/ci.yml`, manual (`gh workflow run test`), rustc pinned for the compile-fail snapshots.
+CI: `.github/workflows/ci.yml` runs `cargo test --workspace` on every push and pull request, with rustc pinned
+for the compile-fail snapshots.
 
-Not verified live: `open()` against a production replica. It needs the granted `db-conformance` app (cap.request
-filed 2026-11-14, escalated to the state-store-cell owner); state-store-cell AGENTS.md allows live tests on
-`repl-probe/ping` only.
+Dependencies not yet public: `ce-wire` and `ce-gate` (the ce-net wire and gate crates) and `state-store-api` are
+fetched from repositories that are not open yet, so a build from a plain clone needs read access to them. CI reads
+them with read-only deploy keys; pull requests from forks run without those keys until the crates are published.
+
+Not verified live: `open()` against a production replica; the tests run against the dev store.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+Licensed under the Apache License, Version 2.0 ([LICENSE](LICENSE)). See [NOTICE](NOTICE).
